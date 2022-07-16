@@ -1,4 +1,4 @@
-Deduplicator bot
+Chat Superviser Bot
 ================
 
 A simple bot to check messages in Telegram group chats for text duplication.  

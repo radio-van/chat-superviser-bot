@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "deduplicator"
+name = "chat-superviser-bot"
 version = "0.1.0"
 description = ""
 authors = ["Shishkin Alexander <shishkin.alexander@disroot.org>"]

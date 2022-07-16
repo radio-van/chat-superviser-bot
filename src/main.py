@@ -15,8 +15,12 @@ def main() -> None:
                         format='%(name)s - %(message)s',
                         handlers=[RichHandler(rich_tracebacks=True)])
 
+    # disable annoying logs
+    logging.getLogger('asyncio_redis').setLevel(logging.WARNING)
+    logging.getLogger('pyrogram').setLevel(logging.WARNING)
+
     bot = Client(
-        'Deduplicator',
+        'ChatSuperviserBot',
         api_id=settings.API_ID,
         api_hash=settings.API_HASH,
         bot_token=settings.BOT_TOKEN,
@@ -24,6 +28,7 @@ def main() -> None:
 
     bot.add_handler(MessageHandler(handle_message))
 
+    logging.getLogger(__name__).info('Bot is operational')
     bot.run()
 
 

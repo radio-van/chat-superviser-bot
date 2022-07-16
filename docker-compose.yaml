@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+  redis:
+    image: redis:3.2
+    restart: unless-stopped
+    ports: 
+      - ${REDIS_PORT}:6379
+    volumes:
+      - ./.data/redis:/data
+
+  bot:
+    image: deduplicator:latest
+    restart: unless-stopped
+    build:
+      context: .
+    environment:
+      # mandatory ENVs
+      - API_ID
+      - API_HASH
+      - BOT_TOKEN
+      - REDIS_HOST
+      - REDIS_PORT
+      # optional ENVs
+      - CHECK_ONLY_FORWARDED_MESSAGES
+      - DUPLICATE_SIMILARITY_THRESHOLD
+      - MESSAGE_LENGTH_WORDS_THRESHOLD
+      - RECENT_MESSAGES_AMOUNT
+      - LOG_LEVEL
+    tty: true

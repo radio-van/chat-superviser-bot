@@ -1,11 +1,11 @@
 import logging
 
-from pyrogram import Client
-from pyrogram.handlers import MessageHandler
+from pyrogram import Client, filters
+from pyrogram.handlers import CallbackQueryHandler, MessageHandler
 from rich.logging import RichHandler
 
 import settings
-from handlers import handle_message
+from handlers import handle_message, handle_punishment
 
 
 def main() -> None:
@@ -26,6 +26,7 @@ def main() -> None:
         bot_token=settings.BOT_TOKEN,
     )
 
+    bot.add_handler(CallbackQueryHandler(handle_punishment, filters.regex('^PUNISHMENT$')))
     bot.add_handler(MessageHandler(handle_message))
 
     logging.getLogger(__name__).info('Bot is operational')

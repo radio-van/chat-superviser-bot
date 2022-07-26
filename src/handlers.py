@@ -7,10 +7,15 @@ from typing import Union
 from pyrogram import Client
 from pyrogram.types import (
     CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     Message,
 )
 
 import settings
+# from jobs import scheduler
+from logic import get_messages_similarity_ratio
+from models import RecentMessage
 from redis import redis_connector
 
 
@@ -27,44 +32,45 @@ log = logging.getLogger(__name__)
 SELF_DESTRUCTION_TICK_S = 5
 
 
-async def handle_message(client: Client, update: Union[CallbackQuery, Message]) -> None:
-    if not await _should_message_be_compared(update):
-        return
+async def _get_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton('Наказать бота', callback_data='PUNISHMENT')]
+    ]
+    return InlineKeyboardMarkup(buttons)
 
+
+async def handle_message(client: Client, update: Union[CallbackQuery, Message]) -> None:
     log.debug(f'Checking message {update.id}')
 
-    # TODO implement media compare
-    # if update.media:
-    #    compare_strategy = _are_media_same
+    if not isinstance(update, Message):
+        log.debug(f'Update {update.id} is not a message, skip')
+        return
 
-    text = update.text or update.caption
+    if settings.CHECK_ONLY_FORWARDED_MESSAGES and not update.forward_date:
+        log.debug(f'Message {update.id} is not a forward, skip')
+        return
 
-    if 'http' in text and settings.CHECK_LINKS:
-        log.debug('Compare strategy - exact')
-        compare_strategy = _are_same
-        target_entity = re.findall(r'https*:\/\/\S+', text)[0]
-    else:
-        log.debug('Compare strategy - ratio')
-        compare_strategy = _are_semi_same
-        target_entity = emoji_pattern.sub(r'', text)  # clean-up emoji
+    if not any((update.caption, update.media, update.text)):
+        log.debug(f'Message {update.id} has no comparable entities')
+        return
 
     # load N recent mesages from memory
     recent_messages: list = await redis_connector.get_data('recent_messages') or []
 
     # compare text of a new message with N recent messages
     for rm in recent_messages:
-        if await compare_strategy(target_entity, rm['text']):
-            warning_text = f'@{update.from_user.username}, уже было тут 👆'
-
-            # if message 'extends' original with media, it's a semi-duplicate
-            if update.media and not rm.get('has_media'):
-                warning_text = f'@{update.from_user.username}, было тут 👆, но без медиа'
-
+        if (ratio := await get_messages_similarity_ratio(
+            update,
+            RecentMessage(**rm),
+        ) > settings.DUPLICATE_SIMILARITY_THRESHOLD):
             warning_message = await client.send_message(
                 chat_id=update.chat.id,
-                text=warning_text,
+                text=f'@{update.from_user.username}, уже было тут 👆\n\n__similarity ratio: {ratio}__',
                 reply_to_message_id=rm['id'],
             )
+
+            redis_duplication_context_key = f'duplication_stats_for_{update.id}'
+            await redis_connector.save_data(redis_duplication_context_key, {'update': update, 'sample': rm})
 
             # store user, who posted a duplicate
             duplication_count_for_user: int = await redis_connector.get_data(
@@ -77,21 +83,25 @@ async def handle_message(client: Client, update: Union[CallbackQuery, Message]) 
 
             # destroy duplication warning after given time, show timer in warning message
             total_self_destruction_time = SELF_DESTRUCTION_TICK_S*settings.SELF_DESTRUCTION_MULTIPLIER
-            for i in range(
-                0, total_self_destruction_time, SELF_DESTRUCTION_TICK_S
-            ):
+            for i in range(0, total_self_destruction_time, SELF_DESTRUCTION_TICK_S):
                 await asyncio.sleep(SELF_DESTRUCTION_TICK_S)
                 await warning_message.edit_text(
                     f'{warning_text}\n`self-destruction in {total_self_destruction_time-i}`'
                 )
 
             await warning_message.delete()
+            await redis_connector.delete_data(redis_duplication_context_key)
 
             return
 
     # save message to the list of recents, to compare with future messages
-    recent_messages.insert(0, {'id': update.id, 'text': text, 'has_media': bool(update.media)})
-    log.debug(f'Message {update.id} saved to recent messages')
+    recent_messages.insert(0,
+                           RecentMessage(
+                               id=update.id,
+                               media_id=update.media.id if update.media else None,
+                               media_group_id=update.media_group_id,
+                               text=update.text or update.caption,
+                           ))
 
     # force Redis behave like a stack: old messages are discarded
     if len(recent_messages) > settings.RECENT_MESSAGES_AMOUNT:
@@ -101,41 +111,11 @@ async def handle_message(client: Client, update: Union[CallbackQuery, Message]) 
         await redis_connector.save_data('recent_messages', recent_messages)
 
 
-async def _should_message_be_compared(update: Union[CallbackQuery, Message]) -> bool:
-    if not isinstance(update, Message):
-        log.debug(f'Update {update.id} is not a message, skip')
-        return
+async def handle_punishment(client: Client, update: CallbackQuery) -> None:
+    incorrectly_marked_message_id = callback_query.message.reply_to_message.id
+    redis_key = f'duplication_context_for_{incorrectly_marked_message_id}'
+    context = await redis_connector.get_data(redis_key)
 
-    # check only messages with text
-    if not (text := update.caption or update.text):
-        log.debug(f'Message {update.id} has no comparable entities')
-        return
+    log.warning(f'Incorrect similarity check for message {incorrectly_marked_message_id}, context: {context}')
 
-    if 'http' in text and settings.CHECK_LINKS:
-        log.debug(f'Message {update.id} contains link, checking...')
-        return True
-
-    if settings.CHECK_ONLY_FORWARDED_MESSAGES and not update.forward_date:
-        log.debug(f'Message {update.id} is not a forward, skip')
-        return
-
-    if len(text.split(' ')) < settings.MESSAGE_LENGTH_WORDS_THRESHOLD:
-        log.debug(f'Message {update.id} is too short, skip')
-        return
-
-    return True
-
-
-async def _are_same(new: str, sample: str) -> bool:
-    log.debug(f'Exact compare {new} with {sample}')
-    return bool(new == sample)
-
-
-async def _are_semi_same(new: str, sample: str) -> bool:
-    ratio = SequenceMatcher(None, new, sample).ratio()
-    return bool(ratio > settings.DUPLICATE_SIMILARITY_THRESHOLD)
-
-
-async def _are_media_same(new, sample) -> bool:
-    # TODO implement
-    pass
+    await redis_connector.delete_data(redis_key)

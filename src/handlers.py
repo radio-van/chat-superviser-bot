@@ -38,18 +38,13 @@ async def _get_keyboard(suspected_msg_id: int) -> InlineKeyboardMarkup:
 
 
 async def handle_message(client: Client, update: Union[CallbackQuery, Message]) -> None:
-    log.debug(f'Checking message {update.id}')
-
     if not isinstance(update, Message):
-        log.debug(f'Update {update.id} is not a message, skip')
         return
 
     if settings.CHECK_ONLY_FORWARDED_MESSAGES and not update.forward_date:
-        log.debug(f'Message {update.id} is not a forward, skip')
         return
 
     if not any((update.caption, update.media, update.text)):
-        log.debug(f'Message {update.id} has no comparable entities')
         return
 
     # unify fields

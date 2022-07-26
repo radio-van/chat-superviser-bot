@@ -69,7 +69,6 @@ async def _compare_text(target: str, source: str) -> float:
         return 0
 
     if any(map(lambda txt: len(txt.split(' ')) < settings.MESSAGE_LENGTH_WORDS_THRESHOLD, (target, source))):
-        log.debug(f'Texts of {target} | {source} are too short, skip')
         return 0
 
     return SequenceMatcher(None, target, source).ratio()

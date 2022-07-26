@@ -15,7 +15,6 @@ class RedisConnector():
     @property
     async def connection(self):
         if not self._connection:
-            log.info('Connecting to Redis: %s:%s...', settings.REDIS_HOST, settings.REDIS_PORT)
             self._connection = await asyncio_redis.Connection.create(
                 host=settings.REDIS_HOST,
                 port=settings.REDIS_PORT,

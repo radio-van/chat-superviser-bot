@@ -17,8 +17,7 @@ def main() -> None:
 
     # disable annoying logs
     logging.getLogger('asyncio_redis').setLevel(logging.WARNING)
-    #logging.getLogger('pyrogram').setLevel(logging.WARNING)
-    logging.getLogger('pyrogram').setLevel(logging.INFO)
+    logging.getLogger('pyrogram').setLevel(logging.WARNING)
 
     bot = Client(
         'ChatSuperviserBot',

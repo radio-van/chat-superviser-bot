@@ -1,11 +1,11 @@
 import logging
 
-from pyrogram import Client
-from pyrogram.handlers import MessageHandler
+from pyrogram import Client, filters
+from pyrogram.handlers import CallbackQueryHandler, MessageHandler, InlineQueryHandler
 from rich.logging import RichHandler
 
 import settings
-from handlers import handle_message
+from handlers import handle_message, handle_punishment, handle_clean
 
 
 def main() -> None:
@@ -17,7 +17,8 @@ def main() -> None:
 
     # disable annoying logs
     logging.getLogger('asyncio_redis').setLevel(logging.WARNING)
-    logging.getLogger('pyrogram').setLevel(logging.WARNING)
+    #logging.getLogger('pyrogram').setLevel(logging.WARNING)
+    logging.getLogger('pyrogram').setLevel(logging.INFO)
 
     bot = Client(
         'ChatSuperviserBot',
@@ -26,9 +27,11 @@ def main() -> None:
         bot_token=settings.BOT_TOKEN,
     )
 
+    bot.add_handler(CallbackQueryHandler(handle_punishment, filters.regex('^PUNISHMENT')))
+    bot.add_handler(InlineQueryHandler(handle_clean, filters.regex('clean')))
     bot.add_handler(MessageHandler(handle_message))
 
-    logging.getLogger(__name__).info('Bot is operational')
+    logging.getLogger(__name__).info('Battle Bot is operational')
     bot.run()
 
 

@@ -5,7 +5,7 @@ services:
     image: redis:3.2
     restart: unless-stopped
     ports: 
-      - ${REDIS_PORT}:6379
+      - 56379:6379
     volumes:
       - ./.data/redis:/data
 
@@ -25,6 +25,6 @@ services:
       - DUPLICATE_SIMILARITY_THRESHOLD
       - MESSAGE_LENGTH_WORDS_THRESHOLD
       - RECENT_MESSAGES_AMOUNT
-      - SELF_DESTRUCTION_MULTIPLIER
+      - SELF_DESTRUCTION_S
       - LOG_LEVEL
     tty: true

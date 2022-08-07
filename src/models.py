@@ -9,3 +9,8 @@ class RecentMessage:
     media_id: Optional[int] = None
     media_group_id: Optional[int] = None
     text: Optional[str] = None
+
+    duplicate_of: Optional[int] = None
+    has_duplicate: Optional[int] = None
+
+    relation_graph: dict = {}

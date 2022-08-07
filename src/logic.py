@@ -1,20 +1,16 @@
-import asyncio
 import logging
-import re
+from collections import namedtuple
 from difflib import SequenceMatcher
-from typing import Union
-
-from pyrogram import Client
 
 import settings
 from models import RecentMessage
-from redis import redis_connector
 
 
 log = logging.getLogger(__name__)
+Ratio = namedtuple('Ratio', ['effective', 'gallery', 'link', 'media', 'text'])
 
 
-async def get_messages_similarity_ratio(target_msg: RecentMessage, source_msg: RecentMessage) -> float:
+async def get_messages_similarity_ratio(target_msg: RecentMessage, source_msg: RecentMessage) -> Ratio:
     # TODO write compare method to dataclass
     gallery_ratio = await _compare_gallery(target_msg.media_group_id, source_msg.media_group_id)
     media_ratio = await _compare_media(target_msg.media_id, source_msg.media_id)
@@ -27,46 +23,53 @@ async def get_messages_similarity_ratio(target_msg: RecentMessage, source_msg: R
 
     log.debug(f'Effective ratios: {effective_ratios}')
 
-    if effective_ratios:
-        return sum(effective_ratios)/len(effective_ratios)
+    global_ratio = sum(effective_ratios)/len(effective_ratios) if effective_ratios else 0
 
-    return 0
+    return Ratio(global_ratio, gallery_ratio, link_ratio, media_ratio, text_ratio)
 
 
 async def _compare_gallery(target: str, source: str) -> float:
-    if not all((target, source)):
-        return 0
+    # previous messages overweight current because has more attachments
+    if source and not target:
+        return 1
 
     if target == source:
-        return 1.0
+        return 1
 
     # TODO get galleries by id and compare each media in it
+
+    # both msg are not galleries, or target is a gallery
     return 0
 
 
 async def _compare_link(target: str, source: str) -> float:
-    if not all((target, source)):
-        return 0
+    # previous messages overweight current because has this entity
+    if source and not target:
+        return 1
 
     if target == source:
         return 1.0
+
     return 0
 
 
 async def _compare_media(target: str, source: str) -> float:
-    if not all((target, source)):
-        return 0
+    # previous messages overweight current because has this entity
+    if source and not target:
+        return 1
 
     if target == source:
         return 1.0
 
     # TODO download and compare files themselves
+
     return 0
 
 
 async def _compare_text(target: str, source: str) -> float:
-    if not all((target, source)):
-        return 0
+    # previous messages overweight current because has this entity
+    if source and not target:
+        return 1
 
     if any(map(lambda txt: len(txt.split(' ')) < settings.MESSAGE_LENGTH_WORDS_THRESHOLD, (target, source))):
         return 0

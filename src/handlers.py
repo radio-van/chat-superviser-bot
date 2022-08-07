@@ -2,7 +2,6 @@ import asyncio
 import logging
 import re
 from dataclasses import asdict
-from difflib import SequenceMatcher
 from typing import Union
 
 from pyrogram import Client
@@ -62,21 +61,34 @@ async def handle_message(client: Client, update: Union[CallbackQuery, Message]) 
     # compare text of a new message with N recent messages
     for rm in recent_messages:
         recent_message = RecentMessage(**rm)
-        ratio = await get_messages_similarity_ratio(target_message, recent_message)
-        if ratio > settings.DUPLICATE_SIMILARITY_THRESHOLD:
-            warning_text = f'@{update.from_user.username}, уже было тут 👆\n\n```similarity ratio: {ratio}\nwill be deleted after {settings.SELF_DESTRUCTION_S} sec```'
+        effective_ratio, gallery_ratio, link_ratio, media_ratio, text_ratio = await get_messages_similarity_ratio(target_message, recent_message)
+
+        # store relation graph
+        recent_message.relation_graph[target_message.id] = {
+            'effective': effective_ratio,
+            'gallery': gallery_ratio,
+            'link': link_ratio,
+            'media': media_ratio,
+        }
+        target_message.relation_graph[recent_message.id] = {
+            'effective': effective_ratio,
+            'gallery': gallery_ratio,
+            'link': link_ratio,
+            'media': media_ratio,
+        }
+
+        if effective_ratio > settings.DUPLICATE_SIMILARITY_THRESHOLD:
+
+            target_message.duplicate_of = recent_message.id
+            recent_message.has_duplicate = target_message.id
+
+            warning_text = f'@{update.from_user.username}, уже было тут 👆\n\n```similarity ratio: {effective_ratio}\nwill be deleted after {settings.SELF_DESTRUCTION_S} sec```'
             warning_message = await client.send_message(
                 chat_id=update.chat.id,
                 text=warning_text,
                 reply_to_message_id=recent_message.id,
                 reply_markup=await _get_keyboard(suspected_msg_id=update.id),
             )
-
-            redis_duplication_context_key = f'duplication_context_for_{update.id}'
-            await redis_connector.save_data(redis_duplication_context_key, {
-                'sample': asdict(recent_message),
-                'update': asdict(target_message),
-            })
 
             # store user, who posted a duplicate
             duplication_count_for_user: int = await redis_connector.get_data(
@@ -90,9 +102,6 @@ async def handle_message(client: Client, update: Union[CallbackQuery, Message]) 
             # destroy duplication warning after given time
             await asyncio.sleep(settings.SELF_DESTRUCTION_S)
             await warning_message.delete()
-            await redis_connector.delete_data(redis_duplication_context_key)
-
-            return
 
     # save message to the list of recents, to compare with future messages
     recent_messages.insert(0, asdict(target_message))
@@ -105,15 +114,13 @@ async def handle_message(client: Client, update: Union[CallbackQuery, Message]) 
     await redis_connector.save_data('recent_messages', recent_messages)
 
 
-async def handle_punishment(client: Client, callback_query: CallbackQuery) -> None:
-    incorrectly_marked_message_id = callback_query.data.split('-')[1]
-    redis_key = f'duplication_context_for_{incorrectly_marked_message_id}'
-    context = await redis_connector.get_data(redis_key)
-
-    log.warning(f'Incorrect similarity check for message {incorrectly_marked_message_id}, context: {context}')
-
+async def handle_info(client: Client, callback_query: CallbackQuery) -> None:
+    bot_message = callback_query.message.id
+    await bot_message.edit_text(
+        callback_query.message.text + '\n\n-----debug-----\n\n' + ''
+    )
+    # delete keyboard
     await callback_query.message.edit_reply_markup()
-    await redis_connector.delete_data(redis_key)
 
 
 async def handle_clean(client: Client, callback_query: CallbackQuery) -> None:

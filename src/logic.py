@@ -4,11 +4,7 @@ import re
 from dataclasses import asdict
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from pyrogram.types import (
-    # InlineKeyboardButton,
-    # InlineKeyboardMarkup,
-    Message,
-)
+from pyrogram.types import Message
 
 import settings
 from models import Ratio, RecentMessage
@@ -85,6 +81,7 @@ async def compare_message_with_recent_messages(message: Message) -> None:
         }
 
         if ratio.effective > settings.DUPLICATE_SIMILARITY_THRESHOLD:
+            log.debug('Ratio is above threshold, mark message as duplicate')
             target_message.duplicate_of = []
             recent_message.has_duplicate = []
 
@@ -98,6 +95,7 @@ async def compare_message_with_recent_messages(message: Message) -> None:
         recent_message = RecentMessage(**rm)  # convert dict to dataclass
 
         ratio: Ratio = await get_ratios(target_message, recent_message)
+        log.debug('Ratio (again): %s, effective - %s', ratio, ratio.effective)
 
         """
         If text is similar additional check is required, because new message can be an
@@ -117,6 +115,8 @@ async def compare_message_with_recent_messages(message: Message) -> None:
         elif ratio.effective > settings.DUPLICATE_SIMILARITY_THRESHOLD:
             warning_text = f'@{message.from_user.username}, по совокупности параметров, похоже, что уже был тут 👆'
 
+        log.debug('Prepared warning text: %s', warning_text)
+
         # message considered as duplicate
         if warning_text:
             # warn user
@@ -132,11 +132,12 @@ async def compare_message_with_recent_messages(message: Message) -> None:
                     '```'
                 ),
                 reply_to_message_id=recent_message.id,
-                # reply_markup=await keyboard(suspected_msg_id=message.id),
             )
 
             # record user sent a duplicate
             await update_user_duplicate_count(user_id=message.from_user.id)
+
+            log.debug('scheduling self-destruction')
 
             # destroy duplication warning after given time
             start_time: datetime.datetime = datetime.datetime.now()\
@@ -159,6 +160,8 @@ async def compare_message_with_recent_messages(message: Message) -> None:
 
     # store recent messages list in Redis
     await redis_connector.save_data('recent_messages', recent_messages)
+
+    log.debug('--------------------')
 
 
 async def update_user_duplicate_count(user_id: int) -> None:
@@ -195,21 +198,3 @@ async def get_ratios(target_message: RecentMessage, recent_message: RecentMessag
     )
 
     return ratio
-
-'''
-async def keyboard(message: Message, effective_ratio: float, gallery_ratio: float,
-                   link_ratio: float, media_ratio: float, text_ratio: float) -> InlineKeyboardMarkup:
-
-async def show_info(client: Client, callback_query: CallbackQuery) -> None:
-    await callback_query.message.edit_text(
-        text=(
-            f'{message.text}\n\n```'
-            '----- debug -----\n\n'
-            f'галерея {gallery_ratio}\n'
-            f'ссылка {link_ratio}\n'
-            f'вложение {media_ratio}\n'
-            f'текст {text_ratio}\n\n'
-            f'итоговый {effective_ratio}\n'
-            '```'
-        ))
-'''

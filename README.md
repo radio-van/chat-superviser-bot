@@ -8,7 +8,7 @@ than defined number of words.
 Bot sends a warning message as a reply to the original message with a mention of the duplicate sender.  
 This warning is self-destroed in defined amount of seconds.
 
-#### installation
+## installation
 * dev deployment
   - define required env vars in `.env` file (see `env.example` for a list of vars)
   - `docker-compose up -d redis` start a Redis container which is used to store recent messages
@@ -18,5 +18,17 @@ This warning is self-destroed in defined amount of seconds.
   - define required env vars in `.env` file (see `env.example` for a list of vars)
   - `docker-compose up -d` start both Redis and bot
 
-#### info
+## info
 Bot is based on [pyrogram](https://pyrogram.org/) library.
+
+#### file structure
+```
+./src                                                                                                                                                                                       
+├── handlers    # handlers for Telegram updates (messages, commands, etc)
+├── logic       # bot business-logic
+├── main        # entry point
+├── models      # dataclasses
+├── redis       # cache connector
+├── settings    # env settings
+└── utils       # helper functions
+```

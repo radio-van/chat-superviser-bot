@@ -105,13 +105,18 @@ async def compare_message_with_recent_messages(message: Message) -> None:
         """
         if ratio.link > settings.DUPLICATE_SIMILARITY_THRESHOLD:
             warning_text = f'@{message.from_user.username}, такая ссылка уже была тут 👆'
+        elif ratio.media > settings.DUPLICATE_SIMILARITY_THRESHOLD:
+            warning_text = f'@{message.from_user.username}, вложения совпадают 👆'
         elif ratio.text > settings.DUPLICATE_SIMILARITY_THRESHOLD:
+            warning_text = f'@{message.from_user.username}, похожий текст уже был тут 👆'
+
             if target_message.media_id and not recent_message.media_id:
                 warning_text = f'@{message.from_user.username}, похожий текст уже был тут 👆,\nно без вложения.'
 
             if target_message.media_group_id and not recent_message.media_group_id:
                 # TODO check gallery length
                 warning_text = f'@{message.from_user.username}, похожий текст уже был тут 👆,\nно без вложений.'
+
         elif ratio.effective > settings.DUPLICATE_SIMILARITY_THRESHOLD:
             warning_text = f'@{message.from_user.username}, по совокупности параметров, похоже, что уже был тут 👆'
 
